@@ -34,7 +34,6 @@ fn main() -> Result<()> {
     match &cli.command {
         Some(Commands::GetAchievements) => {
             let achievements = get_achievements(&settings)?;
-            println!("{:#?}", achievements);
 
             let formatted_achievements: Vec<Vec<String>> = achievements
                 .into_iter()
