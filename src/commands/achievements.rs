@@ -7,8 +7,8 @@ use crate::settings::Settings;
 use crate::steam::{Achievement, Client, GameAchievement, PlayerGameAchievement, UserGame};
 
 fn merge_user_and_game_achievements(
-    user_achievements: &Vec<PlayerGameAchievement>,
-    game_achievements: &Vec<GameAchievement>,
+    user_achievements: &[PlayerGameAchievement],
+    game_achievements: &[GameAchievement],
 ) -> Vec<Achievement> {
     let mut api_name_to_achievement_mapping: HashMap<&str, Achievement> = HashMap::new();
 
