@@ -34,13 +34,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create $VERSION --draft --verify-tag --title "$VERSION"
-  outputs:
-    version: ${{ env.VERSION }}
+    outputs:
+      version: ${{ env.VERSION }}
 
   build-release:
     name: build-release
     needs: ['create-release']
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.platform.os }}
     env:
       # For some builds, we use cross to test on 32-bit and big-endian
       # systems.
@@ -72,7 +72,6 @@ jobs:
             name: ubi-Darwin-x86_64.tar.gz
             cargo_command: cargo
 
-    runs-on: ${{ matrix.platform.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -106,7 +105,7 @@ jobs:
         run: |
           strip target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}          
         # strip doesn't work with cross-arch binaries on Linux or Windows.
-        if: ${{ matrix.platform.target == 'aarch64-pc-windows-msvc') }}
+        if: ${{ matrix.platform.target == 'aarch64-pc-windows-msvc' }}
 
       - name: Publish release artifacts
         uses: actions/upload-artifact@v4
