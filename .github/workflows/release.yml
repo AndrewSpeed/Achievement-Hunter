@@ -26,7 +26,7 @@ jobs:
       - name: Check that the tag version and Cargo.toml version match
         shell: bash
         run: |
-          if grep -vq "version = \"$VERSION\"" Cargo.toml; then
+          if ! grep -q "version = \"$VERSION\"" Cargo.toml; then
             echo "version does not match Cargo.toml" >&2
             exit 1
           fi
