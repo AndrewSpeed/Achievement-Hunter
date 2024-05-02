@@ -1,0 +1,141 @@
+name: release
+
+# only release on major.minor.patch tags
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+# write required to create releases
+permissions:
+  contents: write
+
+jobs:
+  # create the release on GitHub, naming it after the tag that was pushed.
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get the release version from the tag
+        if: env.VERSION == ''
+        run: echo "VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+      - name: Show the version
+        run: |
+          echo "version is: $VERSION"
+      - name: Check that the tag version and Cargo.toml version match
+        shell: bash
+        run: |
+          if grep -vq "version = \"$VERSION\"" Cargo.toml; then
+            echo "version does not match Cargo.toml" >&2
+            exit 1
+          fi
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create $VERSION --draft --verify-tag --title "$VERSION"
+  outputs:
+    version: ${{ env.VERSION }}
+
+  build-release:
+    name: build-release
+    needs: ['create-release']
+    runs-on: ${{ matrix.os }}
+    env:
+      # For some builds, we use cross to test on 32-bit and big-endian
+      # systems.
+      CARGO: cargo
+      # Emit backtraces on panics.
+      RUST_BACKTRACE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - os_name: Linux-x86_64
+            os: ubuntu-20.04
+            target: x86_64-unknown-linux-musl
+            bin: ach
+            name: ubi-Linux-x86_64-musl.tar.gz
+            cargo_command: cargo
+
+          - os_name: Windows-aarch64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            bin: ach.exe
+            name: ubi-Windows-aarch64.zip
+            cargo_command: cargo
+
+          - os_name: macOS-x86_64
+            os: macOS-latest
+            target: x86_64-apple-darwin
+            bin: ach
+            name: ubi-Darwin-x86_64.tar.gz
+            cargo_command: cargo
+
+    runs-on: ${{ matrix.platform.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install musl-tools on Linux
+        run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools
+        if: contains(matrix.platform.os, 'ubuntu')
+
+      - name: Build binary (*nix)
+        shell: bash
+        run: |
+          ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}          
+        if: ${{ !contains(matrix.platform.os, 'windows') }}
+
+      - name: Build binary (Windows)
+        # We have to use the platform's native shell. If we use bash on
+        # Windows then OpenSSL complains that the Perl it finds doesn't use
+        # the platform's native paths and refuses to build.
+        shell: powershell
+        run: |
+          & ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}          
+        if: contains(matrix.platform.os, 'windows')
+
+      - name: Strip binary
+        shell: bash
+        run: |
+          strip target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}          
+        # strip doesn't work with cross-arch binaries on Linux or Windows.
+        if: ${{ matrix.platform.target == 'aarch64-pc-windows-msvc') }}
+
+      - name: Publish release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ach-${{ matrix.platform.os_name }}
+          path: "ach*"
+
+      - name: Build archive (Windows)
+        shell: bash
+        if: matrix.platform.os == 'windows'
+        run: |
+          7z a "$ARCHIVE.zip" "$ARCHIVE"
+          certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
+          echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
+          echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
+
+      - name: Build archive (Unix)
+        shell: bash
+        if: matrix.os != 'windows-latest'
+        run: |
+          tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
+          shasum -a 256 "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
+          echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
+          echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
+
+      - name: Upload release archive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          version="${{ needs.create-release.outputs.version }}"
+          gh release upload "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
