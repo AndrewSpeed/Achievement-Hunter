@@ -40,101 +40,138 @@ jobs:
   build-release:
     name: build-release
     needs: ['create-release']
-    runs-on: ${{ matrix.platform.os }}
+    runs-on: ${{ matrix.os }}
     env:
-      # For some builds, we use cross to test on 32-bit and big-endian
-      # systems.
       CARGO: cargo
+      CROSS_VERSION: v0.2.5
+      # When CARGO is set to CROSS, this is set to `--target matrix.target`.
+      TARGET_FLAGS:
+      # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
+      TARGET_DIR: ./target
       # Emit backtraces on panics.
       RUST_BACKTRACE: 1
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - os_name: Linux-x86_64
-            os: ubuntu-20.04
-            target: x86_64-unknown-linux-musl
-            bin: achievement_hunter
-            name: ubi-Linux-x86_64-musl.tar.gz
-            cargo_command: cargo
-
-          - os_name: Windows-aarch64
-            os: windows-latest
-            target: aarch64-pc-windows-msvc
-            bin: achievement_hunter.exe
-            name: ubi-Windows-aarch64.zip
-            cargo_command: cargo
-
-          - os_name: macOS-x86_64
-            os: macOS-latest
-            target: x86_64-apple-darwin
-            bin: achievement_hunter
-            name: ubi-Darwin-x86_64.tar.gz
-            cargo_command: cargo
+        include:
+        - build: linux
+          os: ubuntu-latest
+          rust: nightly
+          target: x86_64-unknown-linux-musl
+          strip: x86_64-linux-musl-strip
+        - build: macos
+          os: macos-latest
+          rust: nightly
+          target: x86_64-apple-darwin
+        - build: win-msvc
+          os: windows-latest
+          rust: nightly
+          target: x86_64-pc-windows-msvc
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Install toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform.target }}
+    - name: Install packages (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        sudo apt-get update --yes
+        sudo apt-get install --yes --no-install-recommends musl-tools
 
-      - name: Install musl-tools on Linux
-        run: sudo apt-get update --yes && sudo apt-get install --yes musl-tools pkg-config openssl libssl-dev
-        if: contains(matrix.platform.os, 'ubuntu')
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        target: ${{ matrix.target }}
 
-      - name: Build binary (*nix)
-        shell: bash
-        run: |
-          ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}          
-        if: ${{ !contains(matrix.platform.os, 'windows') }}
+    - name: Use Cross
+      if: matrix.os == 'ubuntu-latest' && matrix.target != ''
+      shell: bash
+      run: |
+        # Use the pre-compiled binary releases because cross
+        # has over 100 dependencies and takes a bit to compile.
+        dir="$RUNNER_TEMP/cross-download"
+        mkdir "$dir"
+        echo "$dir" >> $GITHUB_PATH
+        cd "$dir"
+        curl -LO "https://github.com/cross-rs/cross/releases/download/$CROSS_VERSION/cross-x86_64-unknown-linux-musl.tar.gz"
+        tar xf cross-x86_64-unknown-linux-musl.tar.gz
+        echo "CARGO=cross" >> $GITHUB_ENV
 
-      - name: Build binary (Windows)
-        # We have to use the platform's native shell. If we use bash on
-        # Windows then OpenSSL complains that the Perl it finds doesn't use
-        # the platform's native paths and refuses to build.
-        shell: powershell
-        run: |
-          & ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}          
-        if: contains(matrix.platform.os, 'windows')
+    - name: Set target variables
+      shell: bash
+      run: |
+        echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+        echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
 
-      - name: Strip binary
-        shell: bash
-        run: |
-          strip target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}          
-        # strip doesn't work with cross-arch binaries on Linux or Windows.
-        if: ${{ matrix.platform.target == 'aarch64-pc-windows-msvc' }}
+    - name: Show command used for Cargo
+      shell: bash
+      run: |
+        echo "cargo command is: ${{ env.CARGO }}"
+        echo "target flag is: ${{ env.TARGET_FLAGS }}"
+        echo "target dir is: ${{ env.TARGET_DIR }}"
 
-      - name: Publish release artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: achievement_hunter-${{ matrix.platform.os_name }}
-          path: "achievement_hunter*"
+    - name: Build release binary
+      shell: bash
+      run: |
+        ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
+        if [ "${{ matrix.os }}" = "windows-latest" ]; then
+          bin="target/${{ matrix.target }}/release/achievement_hunter.exe"
+        else
+          bin="target/${{ matrix.target }}/release/achievement_hunter"
+        fi
+        echo "BIN=$bin" >> $GITHUB_ENV
 
-      - name: Build archive (Windows)
-        shell: bash
-        if: matrix.platform.os == 'windows'
-        run: |
-          7z a "$ARCHIVE.zip" "$ARCHIVE"
-          certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
-          echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
-          echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
+    - name: Strip release binary (macos)
+      if: matrix.os == 'macos-latest'
+      shell: bash
+      run: strip "$BIN"
 
-      - name: Build archive (Unix)
-        shell: bash
-        if: matrix.os != 'windows-latest'
-        run: |
-          tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
-          shasum -a 256 "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
-          echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
-          echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
+    - name: Strip release binary (cross)
+      if: env.CARGO == 'cross'
+      shell: bash
+      run: |
+        docker run --rm -v \
+          "$PWD/target:/target:Z" \
+          "ghcr.io/cross-rs/${{ matrix.target }}:main" \
+          "${{ matrix.strip }}" \
+          "/$BIN"
 
-      - name: Upload release archive
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          version="${{ needs.create-release.outputs.version }}"
-          gh release upload "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
+    - name: Determine archive name
+      shell: bash
+      run: |
+        version="${{ needs.create-release.outputs.version }}"
+        echo "ARCHIVE=achievement_hunter-$version-${{ matrix.target }}" >> $GITHUB_ENV
+
+    - name: Creating directory for archive
+      shell: bash
+      run: |
+        mkdir "$ARCHIVE"/
+        cp "$BIN" "$ARCHIVE"/
+
+    - name: Build archive (Windows)
+      shell: bash
+      if: matrix.os == 'windows-latest'
+      run: |
+        7z a "$ARCHIVE.zip" "$ARCHIVE"
+        certutil -hashfile "$ARCHIVE.zip" SHA256 > "$ARCHIVE.zip.sha256"
+        echo "ASSET=$ARCHIVE.zip" >> $GITHUB_ENV
+        echo "ASSET_SUM=$ARCHIVE.zip.sha256" >> $GITHUB_ENV
+
+    - name: Build archive (Unix)
+      shell: bash
+      if: matrix.os != 'windows-latest'
+      run: |
+        tar czf "$ARCHIVE.tar.gz" "$ARCHIVE"
+        shasum -a 256 "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
+        echo "ASSET=$ARCHIVE.tar.gz" >> $GITHUB_ENV
+        echo "ASSET_SUM=$ARCHIVE.tar.gz.sha256" >> $GITHUB_ENV
+
+    - name: Upload release archive
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      shell: bash
+      run: |
+        version="${{ needs.create-release.outputs.version }}"
+        gh release upload "$version" ${{ env.ASSET }} ${{ env.ASSET_SUM }}
