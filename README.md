@@ -1,7 +1,5 @@
 # Achievement Hunter
 
-## What is this?
-
 Achievement Hunter (placeholder name) is a tool for identifying steam achievements
 that you haven't achieved yet.
 
@@ -14,6 +12,7 @@ with the following contents:
 api_key = "steam_api_key"  # obtained from https://steamcommunity.com/dev/apikey
 user_id = "user_id"  # details on find this https://help.steampowered.com/en/faqs/view/2816-BE67-5B69-0FEC
 ```
+
 
 ## Why rust?
 
