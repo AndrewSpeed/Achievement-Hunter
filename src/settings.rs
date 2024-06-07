@@ -1,6 +1,6 @@
 use config::{Config, ConfigError, File};
 use serde::Deserialize;
-use std::env;
+use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 pub struct Steam {
@@ -14,15 +14,12 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn new() -> Result<Self, ConfigError> {
-        let mut builder = Config::builder();
+    pub fn new(path: &Path) -> Result<Self, ConfigError> {
+        let builder = Config::builder();
 
-        if let Ok(home_dir) = env::var("HOME") {
-            builder = builder.add_source(File::with_name(&format!(
-                "{home_dir}/.config/achievement_hunter/config.toml"
-            )));
-        }
-
-        builder.build()?.try_deserialize()
+        builder
+            .add_source(File::with_name(path.to_str().unwrap()))
+            .build()?
+            .try_deserialize()
     }
 }
