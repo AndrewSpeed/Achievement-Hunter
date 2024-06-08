@@ -1,12 +1,11 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use comfy_table::Table;
-use std::env;
 use std::path::{Path, PathBuf};
 
 use achievement_hunter::commands::achievements::get_achievements;
 
-use achievement_hunter::settings::Settings;
+use achievement_hunter::settings::{get_config_filepath, Settings};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -28,9 +27,9 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    let home_dir = env::var("HOME")?;
-    let file_path_str = format!("{home_dir}/.config/achievement_hunter/config.toml");
-    let settings_file_path = Path::new(&file_path_str);
+    let settings_filepath: String =
+        get_config_filepath().context("Failed to determine the config filepath")?;
+    let settings_file_path = Path::new(&settings_filepath);
     let settings = Settings::new(&settings_file_path).context("Failed to initialise settings")?;
 
     let cli = Cli::parse();
