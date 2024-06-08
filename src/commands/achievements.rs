@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 use dialoguer::FuzzySelect;
 
 use crate::settings::Settings;
@@ -34,9 +34,13 @@ fn get_game_achievements(
     user_id: &str,
     game: &UserGame,
 ) -> Result<Vec<Achievement>> {
-    let player_achievements = client.get_user_game_achievements(user_id, game.id)?;
+    let player_achievements = client
+        .get_user_game_achievements(user_id, game.id)
+        .context("Failed to retrieve user's achievement for game")?;
 
-    let game_achievements = client.get_game_achievements(game.id)?;
+    let game_achievements = client
+        .get_game_achievements(game.id)
+        .context("Failed to get list of game achievements")?;
 
     ensure!(
         player_achievements.len() == game_achievements.len(),

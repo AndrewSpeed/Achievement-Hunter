@@ -220,7 +220,7 @@ impl Client<'_> {
             .send()
             .context("Steam API request failed")?
             .json::<GameAchievementsResponse>()
-            .context("Converting response failed")?;
+            .context("Converting game achievements response failed")?;
 
         Ok(response.game.stats.achievements)
     }
@@ -234,7 +234,7 @@ impl Client<'_> {
             .send()
             .context("Steam API request failed")?
             .json::<UserGamesResponse>()
-            .context("Converting response failed")?;
+            .context("Converting user games response failed")?;
 
         Ok(response.response.games)
     }
@@ -252,7 +252,7 @@ impl Client<'_> {
             .send()
             .context("Steam player game achievements request failed")?
             .json::<PlayerGameAchievementsResponse>()
-            .context("Converting game achievements response failed")?;
+            .context("Converting player game achievements response failed")?;
 
         Ok(response.player_stats.achievements)
     }

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use comfy_table::Table;
 use std::env;
@@ -31,13 +31,13 @@ fn main() -> Result<()> {
     let home_dir = env::var("HOME")?;
     let file_path_str = format!("{home_dir}/.config/achievement_hunter/config.toml");
     let settings_file_path = Path::new(&file_path_str);
-    let settings = Settings::new(&settings_file_path)?;
+    let settings = Settings::new(&settings_file_path).context("Failed to initialise settings")?;
 
     let cli = Cli::parse();
 
     match &cli.command {
         Some(Commands::GetAchievements) => {
-            let achievements = get_achievements(&settings)?;
+            let achievements = get_achievements(&settings).context("Failed to get achievements")?;
 
             let formatted_achievements: Vec<Vec<String>> = achievements
                 .into_iter()
