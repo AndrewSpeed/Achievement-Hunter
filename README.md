@@ -6,13 +6,15 @@ that you haven't achieved yet.
 
 ## Setup
 
-A config file is expected to exist at `$HOME/.config/achievement_hunter/config.toml`
-with the following contents:
+A config file containing your Steam API key and user ID are required, for example:
 ```toml
 [steam]
 api_key = "steam_api_key"  # obtained from https://steamcommunity.com/dev/apikey
 user_id = "user_id"  # details on find this https://help.steampowered.com/en/faqs/view/2816-BE67-5B69-0FEC
 ```
+
+For *nix systems this file should be placed at `$HOME/.config/achievement_hunter/config.toml`,
+while for Windows it will need to be placed at `C:\ProgramData\achievement_hunter\config.toml`.
 
 
 ## Why rust?
