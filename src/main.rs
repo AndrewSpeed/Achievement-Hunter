@@ -28,13 +28,10 @@ enum Commands {
 }
 
 fn main() -> Result<()> {
-    let setting_file_path = if let Ok(home_dir) = env::var("HOME") {
-        let file_path_str = format!("{home_dir}/.config/achievement_hunter/config.toml");
-        Path::new(&file_path_str)
-    } else {
-        bail!("Unable to locate settings file!");
-    };
-    let settings = Settings::new(&setting_file_path)?;
+    let home_dir = env::var("HOME")?;
+    let file_path_str = format!("{home_dir}/.config/achievement_hunter/config.toml");
+    let settings_file_path = Path::new(&file_path_str);
+    let settings = Settings::new(&settings_file_path)?;
 
     let cli = Cli::parse();
 
