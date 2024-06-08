@@ -2,13 +2,13 @@ use config::{Config, ConfigError, File};
 use serde::Deserialize;
 use std::path::Path;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct Steam {
     pub api_key: String,
     pub user_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct Settings {
     pub steam: Steam,
 }
